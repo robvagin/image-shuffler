@@ -1,0 +1,1835 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Image Shuffler</title>
+<style>
+:root{--paper:#f6f5f2;--ink:#1a1a1a;--muted:#6f6d67;--line:#dcdad4;--accent:#0b0b0c;--panel:#fdfdfc}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--paper);color:var(--ink);font:12px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+#stage{position:fixed;inset:0}
+canvas#cv{display:block;width:100vw;height:100vh;cursor:grab}
+canvas#cv:active{cursor:grabbing}
+#panel{position:fixed;top:16px;left:16px;width:288px;max-height:calc(100vh - 32px);
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  display:flex;flex-direction:column;overflow:hidden;z-index:10}
+#tabs{display:flex;border-bottom:1px solid var(--line)}
+#tabs button{flex:1;padding:11px 0;background:none;border:0;font:inherit;color:var(--muted);
+  cursor:pointer;text-transform:uppercase;letter-spacing:.06em;font-size:10px}
+#tabs button[aria-selected="true"]{color:var(--ink);box-shadow:inset 0 -2px var(--ink)}
+#body{overflow-y:auto;overflow-x:hidden;padding:12px 14px 16px}
+.tab{display:none}.tab.on{display:block}
+fieldset{border:0;margin:0 0 14px;padding:0}
+legend{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+  padding:0;margin-bottom:8px;cursor:pointer;user-select:none;width:100%}
+legend::before{content:'▾ ';font-size:8px;color:var(--muted)}
+fieldset.closed>legend::before{content:'▸ '}
+fieldset.closed>*:not(legend){display:none}
+.row{display:grid;grid-template-columns:1fr 64px 48px;gap:8px;align-items:center;margin:5px 0}
+.row label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row input[type=range]{width:100%;accent-color:var(--ink);height:2px}
+.row input[type=number]{width:100%;font:10px ui-monospace,monospace;color:var(--muted);
+  background:var(--paper);border:1px solid var(--line);border-radius:4px;text-align:right;padding:3px 4px}
+.row input[type=number]:focus{color:var(--ink);outline:none;border-color:var(--ink)}
+.row input[type=number]::-webkit-inner-spin-button{display:none}
+.row.toggle{grid-template-columns:1fr auto}
+.sw{appearance:none;-webkit-appearance:none;width:30px;height:16px;margin:0;cursor:pointer;
+  border:1px solid var(--line);border-radius:99px;background:var(--paper);position:relative}
+.sw::before{content:'';position:absolute;top:2px;left:2px;width:10px;height:10px;
+  border-radius:50%;background:var(--muted);transition:left .15s,background .15s}
+.sw:checked{border-color:var(--ink);background:var(--ink)}
+.sw:checked::before{left:16px;background:var(--paper)}
+.selectRow{display:grid;grid-template-columns:1fr 132px;gap:8px;align-items:center;margin:6px 0}
+.selectRow label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sel,select.tin{font:10px ui-monospace,monospace;border:1px solid var(--line);border-radius:4px;background:var(--paper);color:var(--ink);padding:5px 6px;width:100%}
+.sel:focus{outline:none;border-color:var(--ink)}
+.mpad{position:relative;width:100%;aspect-ratio:1;touch-action:none;cursor:crosshair;margin:2px 0 4px}
+.mpad canvas{position:absolute;inset:0;width:100%;height:100%;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:crosshair}
+.mcn{position:absolute;font-size:9px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;pointer-events:none;user-select:none}
+.mcn.nw{left:7px;top:6px}.mcn.ne{right:7px;top:6px}.mcn.swc{left:7px;bottom:6px}.mcn.se{right:7px;bottom:6px}
+.hint,.note{color:var(--muted);font-size:10px;margin:6px 0;line-height:1.5}
+.btn{display:inline-block;padding:8px 12px;border:1px solid var(--line);border-radius:6px;
+  background:none;font:inherit;font-size:11px;cursor:pointer;margin:3px 4px 3px 0;color:var(--ink)}
+.btn:hover{border-color:var(--ink)}
+.btn.acc{border-color:var(--accent);color:var(--accent)}
+.btn.wide{display:block;width:100%;text-align:center;margin:6px 0}
+.colorRow{display:grid;grid-template-columns:1fr 28px 78px;gap:8px;align-items:center;margin:5px 0}
+.colorRow input[type=color]{width:28px;height:22px;padding:0;border:1px solid var(--line);border-radius:4px;background:var(--paper)}
+.colorRow input.tin{font:10px ui-monospace,monospace;border:1px solid var(--line);border-radius:4px;background:var(--paper);color:var(--ink);padding:4px 6px;width:100%}
+#drop{border:1.5px dashed var(--line);border-radius:8px;padding:20px 10px;text-align:center;color:var(--muted);cursor:pointer;transition:.15s}
+#drop.hot{border-color:var(--accent);color:var(--accent);background:rgba(240,67,92,.04)}
+#thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+.thumb{position:relative;aspect-ratio:1;border-radius:6px;overflow:hidden;border:1px solid var(--line);background:var(--paper)}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb b{position:absolute;top:2px;left:3px;font-size:8px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.thumb i{position:absolute;top:0;right:0;width:15px;height:15px;line-height:14px;text-align:center;background:rgba(0,0,0,.55);color:#fff;font-style:normal;font-size:11px;cursor:pointer;border-bottom-left-radius:6px}
+#recDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#c33;margin-right:6px;vertical-align:middle;opacity:0}
+#recDot.on{opacity:1;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:.25}}
+#hint{position:fixed;bottom:12px;right:20px;color:var(--muted);font-size:10px;letter-spacing:.04em;z-index:5;pointer-events:none}
+#mtrans{position:fixed;bottom:34px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:11}
+#mtrans button{font:inherit;font-size:10px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:6px 12px;cursor:pointer;text-transform:uppercase;letter-spacing:.05em}
+#mtrans button[aria-pressed="true"]{border-color:var(--ink)}
+body.noui #panel,body.noui #hint,body.noui #mtrans{display:none}
+#uitoggle{position:fixed;top:16px;left:16px;z-index:30;width:38px;height:38px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;font-size:16px;display:none;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.08)}
+body.noui #uitoggle{display:flex}
+#selftest{position:fixed;right:16px;bottom:34px;background:#111;color:#0f0;padding:6px 8px;border-radius:6px;display:none;z-index:6}
+
+:root{--h-bg:#f6f5f2;--h-card:#ecebe6;--h-field:#ffffff;--h-ink:#1a1a1a;--h-ink2:#3d3c39;--h-ink3:#5c5b57;--h-fill:rgba(26,26,26,.07);--h-fill-hover:rgba(26,26,26,.10);--h-fill-strong:rgba(26,26,26,.15);--h-fill-active:rgba(26,26,26,.24);--h-hair:rgba(26,26,26,.10);--h-line:rgba(26,26,26,.14);--h-seg-on:#ffffff;--h-track-s:.02em;--h-ring:oklch(.49 .08 182);--h-sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Inter","Segoe UI",Roboto,Helvetica,Arial,sans-serif;--h-mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;--h-display:"Inter Tight",-apple-system,BlinkMacSystemFont,"SF Pro Display",system-ui,sans-serif;
+  --paper:var(--h-bg);--ink:var(--h-ink);--muted:var(--h-ink3);--line:var(--h-hair);--accent:var(--h-ink);--panel:var(--h-bg)}
+body.dark{--h-bg:#161615;--h-card:#21211f;--h-field:#2b2b29;--h-ink:#ecebe6;--h-ink2:#cfcec8;--h-ink3:#a6a59f;--h-fill:rgba(255,255,255,.07);--h-fill-hover:rgba(255,255,255,.10);--h-fill-strong:rgba(255,255,255,.16);--h-fill-active:rgba(255,255,255,.26);--h-hair:rgba(255,255,255,.10);--h-line:rgba(255,255,255,.14);--h-seg-on:#3d3d3a;--h-track-s:.025em;--h-ring:oklch(.78 .09 182 / .7);--paper:var(--h-bg);--ink:var(--h-ink);--muted:var(--h-ink3);--line:var(--h-hair);--accent:var(--h-ink);--panel:var(--h-bg)}
+html,body{font-family:var(--h-sans);font-size:12.5px;line-height:1.45}
+#panel,body.dark #panel{background:var(--h-bg);border:1px solid var(--h-hair);border-radius:6px;color:var(--h-ink);box-shadow:none}
+#tabs{gap:2px;margin:10px 12px 2px;padding:3px;border:0;border-radius:6px;background:var(--h-fill)}
+#tabs button{padding:6px 0;border-radius:4px;font:500 11.5px var(--h-sans);letter-spacing:var(--h-track-s);text-transform:none;color:var(--h-ink2)}
+#tabs button[aria-selected="true"],body.dark #tabs button[aria-selected="true"]{background:var(--h-seg-on);color:var(--h-ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+legend{font:600 10.5px var(--h-sans);letter-spacing:.07em;color:var(--h-ink3)}
+.row,.selectRow,.colorRow{min-height:28px;margin:4px 0}
+.row{grid-template-columns:minmax(0,1fr) 92px 40px}
+.row label,.selectRow label,.colorRow label{color:var(--h-ink2);letter-spacing:var(--h-track-s)}
+.row input[type=range]{-webkit-appearance:none;appearance:none;height:26px;margin:0;border-radius:4px;cursor:ew-resize;
+  background:linear-gradient(90deg,var(--h-fill-strong) var(--p,50%),var(--h-fill) var(--p,50%))}
+.row input[type=range]:active{background:linear-gradient(90deg,var(--h-fill-active) var(--p,50%),var(--h-fill) var(--p,50%))}
+.row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:2px;height:26px;border-radius:1px;background:var(--h-ink)}
+.row input[type=range]::-moz-range-thumb{width:2px;height:26px;border:0;border-radius:1px;background:var(--h-ink)}
+.row input[type=number]{border:0;background:transparent;font:12px var(--h-mono);color:var(--h-ink2);text-align:right}
+.sw,body.dark .sw{border:0;background:var(--h-fill-strong)}
+.sw::before{background:var(--h-field)}
+.sw:checked,body.dark .sw:checked{border:0;background:var(--h-ink)}
+.sw:checked::before{background:var(--h-bg)}
+.tin,.sel,.selectRow select{height:26px;border:0;border-radius:4px;background:var(--h-fill);color:var(--h-ink);font:12px var(--h-sans)}
+.seg{gap:2px;padding:3px;border-radius:6px;background:var(--h-fill)}
+.seg button{border:0;border-radius:4px;background:transparent;color:var(--h-ink2);font:500 11.5px var(--h-sans)}
+.seg button[aria-selected=true],.seg button[aria-pressed=true],body.dark .seg button[aria-selected=true],body.dark .seg button[aria-pressed=true]{border:0;background:var(--h-seg-on);color:var(--h-ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.beh{gap:2px;padding:3px;border-radius:6px;background:var(--h-fill)}
+.beh button{border:0;border-radius:4px;background:transparent;color:var(--h-ink2);font:500 11.5px var(--h-sans)}
+.beh button[aria-selected="true"]{border:0;background:var(--h-seg-on);color:var(--h-ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+#panel>header b{font:600 10.5px var(--h-sans);letter-spacing:.07em;color:var(--h-ink3)}
+.btn{border:0;border-radius:4px;background:var(--h-fill);color:var(--h-ink);font:500 12px var(--h-sans)}
+.btn:hover{border:0;background:var(--h-fill-hover)}
+.btn.acc{background:var(--h-ink);color:var(--h-bg)}
+.mpad canvas,body.dark .mpad canvas{border:0;border-radius:6px;background:var(--h-field)}
+.colorRow input[type=color]{border:0;border-radius:4px}
+#mtrans button,#mtrans .msp,body.dark #mtrans button,body.dark #mtrans .msp,#uitoggle,body.dark #uitoggle{border:1px solid var(--h-hair);background:var(--h-bg);color:var(--h-ink)}
+#mtrans button[aria-pressed="true"]{background:var(--h-ink);color:var(--h-bg)}
+:focus-visible{outline:2px solid var(--h-ring);outline-offset:1px}
+</style>
+<meta name="description" content="Your screens flying in 3D, ready to record as a video. One HTML file, runs in the browser."><meta property="og:type" content="website"><meta property="og:title" content="Image Shuffler"><meta property="og:description" content="Your screens flying in 3D, ready to record as a video. One HTML file, runs in the browser."><meta property="og:url" content="https://robvagin.github.io/image-shuffler/"><meta property="og:image" content="https://robvagin.github.io/image-shuffler/docs/social.png"><meta property="og:image:width" content="1280"><meta property="og:image:height" content="640"><meta name="twitter:card" content="summary_large_image"><link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMzAgMTAwIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI1MCIgZmlsbD0iIzFhMWExYSIvPjxwb2x5Z29uIHBvaW50cz0iMTcyLjUsMCAyMzAsMTAwIDExNSwxMDAiIGZpbGw9IiM1YzViNTciLz48cmVjdCB4PSIyMzAiIHk9IjAiIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiBmaWxsPSIjYTZhNTlmIi8+PC9zdmc+">
+</head>
+<body>
+<div id="stage"><canvas id="cv"></canvas></div>
+<div id="panel">
+  <div id="tabs">
+    <button data-tab="media">Media</button>
+    <button data-tab="controls" aria-selected="true">Controls</button>
+    <button data-tab="export">Export</button>
+  </div>
+  <div id="body">
+    <div class="tab" data-tab="media">
+      <fieldset>
+        <legend>Image uploads</legend>
+        <div id="drop">Drop screenshots here<br>or click to choose</div>
+        <input id="fileInput" type="file" accept="image/*" multiple hidden>
+        <div id="thumbs"></div>
+        <div style="margin-top:8px"><button class="btn" id="clearAll">Clear all</button><button class="btn" id="demoFill">Demo tiles</button></div>
+        <div class="note">Images tile across the items in order. With none loaded, neutral frames stand in so you can dial the motion first.</div>
+      </fieldset>
+    </div>
+    <div class="tab on" data-tab="controls">
+      <fieldset>
+        <legend>Layout</legend>
+        <div class="selectRow"><label>Animation style</label><select class="sel" id="layoutSel"></select></div>
+        <div class="note" id="layoutNote"></div>
+      </fieldset>
+      <fieldset id="gFrame"><legend>Frames</legend>
+        <div class="selectRow"><label>Canvas ratio</label><select class="sel" id="canvasAR">
+          <option value="16:9">Wide (16:9)</option><option value="1:1">Square (1:1)</option><option value="9:16">Tall (9:16)</option></select></div>
+        <div class="selectRow"><label>Item ratio</label><select class="sel" id="itemAR">
+          <option value="original">Original</option><option value="1:1">Square (1:1)</option><option value="16:9">Wide (16:9)</option><option value="4:5">Tall (4:5)</option></select></div>
+        <div class="selectRow"><label>Fit</label><select class="sel" id="fitSel">
+          <option value="cover">Cover (crop)</option><option value="contain">Contain (fit)</option></select></div>
+      </fieldset>
+      <fieldset id="gAxes"><legend>Axes / path</legend>
+        <div class="note">Shapes the axes for the Flow-family styles (Flow, scrollers, waterfall, sine, zigzag).</div>
+      </fieldset>
+      <fieldset id="gScene"><legend>Scene</legend></fieldset>
+      <fieldset id="gMotion">
+        <legend>Motion pad</legend>
+        <div class="mpad" id="mpad">
+          <canvas id="mpadc"></canvas>
+          <span class="mcn nw">soft</span><span class="mcn ne">raw</span>
+          <span class="mcn swc">slow</span><span class="mcn se">fast</span>
+        </div>
+        <div class="selectRow"><label>Ease preset</label><select class="sel" id="easePreset">
+          <option value="balanced">Balanced</option><option value="glide">Glide — soft</option>
+          <option value="snappy">Snappy</option><option value="linear">Linear</option>
+        </select></div>
+        <div id="gMotionSliders"></div>
+      </fieldset>
+      <fieldset id="gCamera"><legend>Camera / depth</legend>
+        <div class="note">Perspective: 0 = flat, higher = stronger 3-D foreshortening on rings, flips and carousels.</div>
+      </fieldset>
+      <fieldset id="gColors"><legend>Background</legend></fieldset>
+    </div>
+    <div class="tab" data-tab="export">
+      <fieldset>
+        <legend>Video</legend>
+        <button class="btn acc wide" id="recBtn"><span id="recDot"></span>Start recording</button>
+        <div class="selectRow"><label>Duration (s)</label><input class="sel" type="number" id="recDur" min="1" max="30" step="1" value="6"></div>
+        <div class="note" id="recNote">Records at 30 fps and 1080p, cropped to the <b>Canvas ratio</b> (the dashed guide shows the frame). Saves WebM/MP4, whichever your browser supports. Auto-stops after the set duration, or click again to stop.</div>
+      </fieldset>
+      <fieldset><legend>Still</legend>
+        <button class="btn wide" id="savePng">Export PNG frame</button>
+      </fieldset>
+      <fieldset><legend>Project</legend>
+        <button class="btn" id="saveCfg">Save JSON</button>
+        <label class="btn" for="loadFile">Load JSON</label>
+        <input id="loadFile" type="file" accept="application/json" hidden>
+        <div class="note">Config load deep-merges into current settings (images not stored).</div>
+      </fieldset>
+      <fieldset><legend>UI</legend>
+        <button class="btn" id="hideBtn">Hide UI (H)</button>
+      </fieldset>
+    </div>
+  </div>
+</div>
+<button id="uitoggle" title="Show panel">☰</button>
+<div id="hint">drag — orbit (ring / carousel styles) · wheel — zoom · H — toggle UI</div>
+<div id="mtrans"><button id="replay">⟲ Replay</button><button id="loop" aria-pressed="true">Loop</button></div>
+<div id="selftest">SELFTEST_OK</div>
+<script>
+const TAU = Math.PI * 2;
+
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+
+const lerp = (a, b, t) => a + (b - a) * t;
+
+const wrap01 = v => {
+  v = v % 1;
+  return v < 0 ? v + 1 : v;
+};
+
+function rng(seed) {
+  let s = seed >>> 0 || 1;
+  return function() {
+    s = s * 1664525 + 1013904223 >>> 0;
+    return s / 4294967296;
+  };
+}
+
+function rot3Y(p, a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  return {
+    x: p.x * c + p.z * s,
+    y: p.y,
+    z: -p.x * s + p.z * c
+  };
+}
+
+function rot3X(p, a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  return {
+    x: p.x,
+    y: p.y * c - p.z * s,
+    z: p.y * s + p.z * c
+  };
+}
+
+function project(p, cam, W, H) {
+  const q = rot3X(rot3Y(p, cam.yaw), cam.tilt);
+  const base = Math.min(FR.w, FR.h) * .46;
+  const d = 3.2, z = Math.max(.4, d - q.z * (cam.persp || 0)), k = base * cam.zoom / z;
+  return {
+    x: FR.x + FR.w / 2 + q.x * k,
+    y: FR.y + FR.h / 2 - q.y * k,
+    z: q.z,
+    k: k
+  };
+}
+
+function arValue(tag, imgAspect) {
+  if (tag === 'original') return imgAspect || 1;
+  if (tag === '1:1') return 1;
+  if (tag === '16:9') return 16 / 9;
+  if (tag === '4:5') return 4 / 5;
+  if (tag === '9:16') return 9 / 16;
+  const m = String(tag).split(':');
+  return m.length === 2 ? +m[0] / +m[1] : 1;
+}
+
+function flowItem(i, N, t, C) {
+  const F = C.F, S = C.S;
+  const axes = Math.max(1, Math.round(F.axes || 1));
+  const lane = i % axes, inLane = Math.floor(i / axes), perLane = Math.max(1, Math.ceil(N / axes));
+  const th = (F.angle || 0) * Math.PI / 180, ct = Math.cos(th), st = Math.sin(th);
+  const vx = C.vx, vy = C.vy;
+  const reach = Math.abs(ct) * vx + Math.abs(st) * vy + .6;
+  const perpReach = Math.abs(st) * vx + Math.abs(ct) * vy;
+  const step = Math.max(.09, (F.gap == null ? 1 : F.gap) * .5 * (S.size / 100));
+  const loop = Math.max(perLane * step, 2 * reach + 2 * step);
+  const off = t * (F.speed == null ? 1 : F.speed) * S.speed * .5;
+  let c = (inLane * step - off) % loop;
+  c = (c % loop + loop) % loop;
+  c -= loop / 2;
+  const laneOff = axes > 1 ? (lane - (axes - 1) / 2) * (perpReach * 1.5 / axes) : 0;
+  const bendAt = x => (F.bend || 0) * Math.sin(x / reach * Math.PI * (F.bendFreq || 1));
+  const dc = .02, across = laneOff + bendAt(c), across2 = laneOff + bendAt(c + dc);
+  const p1x = ct * c - st * across, p1y = st * c + ct * across;
+  const p2x = ct * (c + dc) - st * across2, p2y = st * (c + dc) + ct * across2;
+  const scGrad = 1 - (F.scaleGrad || 0) * clamp(Math.abs(c) / reach, 0, 1);
+  const phi = (F.tilt3d || 0) * .85, cph = Math.cos(phi), sph = Math.sin(phi);
+  const cx = p1x, cy = p1y * cph, cz = p1y * sph;
+  let hx = p2x - p1x, hy = (p2y - p1y) * cph, hz = (p2y - p1y) * sph;
+  const hl = Math.hypot(hx, hy, hz) || 1;
+  hx /= hl;
+  hy /= hl;
+  hz /= hl;
+  const edge = clamp((reach - Math.abs(c)) / .5, 0, 1);
+  const skip = Math.abs(c) > reach + .5;
+  const fh = clamp(F.faceHeading || 0, 0, .8), pa = (F.photoAngle || 0) * Math.PI / 180;
+  const out = {
+    x: cx,
+    y: cy,
+    z: cz,
+    scale: scGrad,
+    alpha: edge,
+    skip: skip,
+    order: -Math.abs(c)
+  };
+  if (fh < .03 && phi < .03) {
+    out.faceCam = true;
+    out.rot2d = pa;
+  } else {
+    let nx = lerp(0, hx, fh), ny = lerp(0, hy, fh), nz = lerp(1, hz, fh);
+    let nl = Math.hypot(nx, ny, nz) || 1;
+    nx /= nl;
+    ny /= nl;
+    nz /= nl;
+    let r0x = nz, r0y = 0, r0z = -nx;
+    let r0l = Math.hypot(r0x, r0y, r0z);
+    if (r0l < 1e-4) {
+      r0x = 1;
+      r0z = 0;
+      r0l = 1;
+    }
+    r0x /= r0l;
+    r0z /= r0l;
+    let u0x = ny * r0z - nz * r0y, u0y = nz * r0x - nx * r0z, u0z = nx * r0y - ny * r0x;
+    let u0l = Math.hypot(u0x, u0y, u0z) || 1;
+    u0x /= u0l;
+    u0y /= u0l;
+    u0z /= u0l;
+    const cpa = Math.cos(pa), spa = Math.sin(pa);
+    out.faceCam = false;
+    out.right = {
+      x: r0x * cpa + u0x * spa,
+      y: r0y * cpa + u0y * spa,
+      z: r0z * cpa + u0z * spa
+    };
+    out.up = {
+      x: -r0x * spa + u0x * cpa,
+      y: -r0y * spa + u0y * cpa,
+      z: -r0z * spa + u0z * cpa
+    };
+  }
+  return out;
+}
+
+function waterfallItem(i, N, t, C) {
+  const F = C.F, S = C.S, vx = C.vx, vy = C.vy;
+  const cols = Math.max(1, Math.round(F.axes || 3));
+  const col = i % cols, idx = Math.floor(i / cols), per = Math.max(1, Math.ceil(N / cols));
+  const step = Math.max(.12, (F.gap == null ? 1 : F.gap) * .62 * (S.size / 100));
+  const loop = Math.max(per * step, 2 * vy + 2 * step);
+  const colPhase = col * .41 % 1, off = t * (F.speed == null ? 1 : F.speed) * S.speed * .55 + colPhase * loop;
+  let c = (idx * step + off) % loop;
+  c = (c % loop + loop) % loop;
+  const y = vy + step - c;
+  const colX = (col - (cols - 1) / 2) * (vx * 1.7 / cols), jit = Math.sin(idx * 12.9 + col * 4.7) * .06;
+  const sc = 1 - (F.scaleGrad || 0) * .5 * clamp(Math.abs(y) / vy, 0, 1);
+  const edge = clamp((vy + .45 - Math.abs(y)) / .5, 0, 1), skip = Math.abs(y) > vy + .55;
+  const pa = (F.photoAngle || 0) * Math.PI / 180;
+  return {
+    x: colX + jit,
+    y: y,
+    z: 0,
+    scale: sc,
+    faceCam: true,
+    rot2d: pa + (col - (cols - 1) / 2) * .04,
+    alpha: edge,
+    skip: skip,
+    order: -Math.abs(y)
+  };
+}
+
+const LAYOUTS = {
+  flow: (i, N, t, C) => flowItem(i, N, t, C),
+  waterfall: (i, N, t, C) => waterfallItem(i, N, t, C),
+  'sine-wave': (i, N, t, C) => flowItem(i, N, t, C),
+  zigzag: (i, N, t, C) => flowItem(i, N, t, C),
+  'pulsing-circle': (i, N, t, C) => {
+    const S = C.S, a = i / Math.max(1, N) * TAU + t * .18 * S.speed * (.4 + S.spin);
+    const rad = .7 + .18 * Math.sin(t * 1.2);
+    return {
+      x: Math.cos(a) * rad * 1.1,
+      y: Math.sin(a) * rad,
+      z: 0,
+      scale: 1,
+      faceCam: true,
+      alpha: 1
+    };
+  },
+  float: (i, N, t, C) => {
+    const S = C.S, r1 = C.rnd(i), r2 = C.rnd(i + 911), r3 = C.rnd(i + 53);
+    const x = (r1 * 2 - 1) * C.vx * .9 + Math.sin(t * .3 * S.speed + r1 * 10) * .12;
+    const y = (r2 * 2 - 1) * C.vy * .9 + Math.cos(t * .27 * S.speed + r2 * 10) * .12;
+    return {
+      x: x,
+      y: y,
+      z: 0,
+      scale: lerp(.85, 1.1, r3),
+      faceCam: true,
+      rot2d: (r3 - .5) * .2,
+      alpha: 1
+    };
+  },
+  radial: (i, N, t, C) => {
+    const S = C.S, a = i / Math.max(1, N) * TAU + t * .3 * S.speed * (.5 + S.spin), R = 1;
+    return {
+      x: Math.cos(a) * R,
+      y: 0,
+      z: Math.sin(a) * R,
+      scale: 1,
+      faceCam: true,
+      alpha: 1
+    };
+  },
+  grid: (i, N, t, C) => {
+    const S = C.S, cols = Math.ceil(Math.sqrt(N)), rows = Math.ceil(N / cols);
+    const cyc = Math.floor(t * .25 * S.speed), perm = (i + cyc * 7) % Math.max(1, N);
+    const gx = perm % cols, gy = Math.floor(perm / cols);
+    const x = (gx - (cols - 1) / 2) * (C.vx * 1.7 / Math.max(1, cols));
+    const y = (gy - (rows - 1) / 2) * (C.vy * 1.7 / Math.max(1, rows));
+    return {
+      x: x,
+      y: -y,
+      z: 0,
+      scale: .92,
+      faceCam: true,
+      alpha: 1
+    };
+  },
+  vortex: (i, N, t, C) => {
+    const S = C.S, u = i / Math.max(1, N), a = u * TAU * 3 + t * .5 * S.speed, rad = .14 + u * 1.05;
+    return {
+      x: Math.cos(a) * rad,
+      y: Math.sin(a) * rad,
+      z: 0,
+      scale: lerp(1.12, .5, u),
+      faceCam: true,
+      rot2d: a + Math.PI / 2,
+      alpha: 1
+    };
+  },
+  helix: (i, N, t, C) => {
+    const S = C.S, u = i / Math.max(1, N), strand = i % 2, a = u * TAU * 2.2 + t * .6 * S.speed + strand * Math.PI;
+    return {
+      x: Math.sin(a) * .55,
+      y: (u * 2 - 1) * 1.05,
+      z: Math.cos(a) * .55,
+      scale: 1,
+      faceCam: true,
+      alpha: 1
+    };
+  },
+  spring: (i, N, t, C) => {
+    const S = C.S, u = i / Math.max(1, N), a = u * TAU * 4 + t * .5 * S.speed;
+    return {
+      x: (u * 2 - 1) * 1.5,
+      y: Math.sin(a) * .5,
+      z: Math.cos(a) * .5,
+      scale: 1,
+      faceCam: true,
+      alpha: 1
+    };
+  },
+  'flip-book': (i, N, t, C) => {
+    const S = C.S, u = i / Math.max(1, N), op = t * .9 * S.speed + i * .45;
+    return {
+      x: 0,
+      y: (u * 2 - 1) * .95,
+      z: 0,
+      scale: 1,
+      faceCam: false,
+      oy: 0,
+      op: op,
+      alpha: 1
+    };
+  },
+  carousel: (i, N, t, C) => {
+    const S = C.S, N1 = Math.max(1, N), front = t * .14 * S.speed * N1;
+    let d = i - front;
+    d = (d % N1 + N1) % N1;
+    if (d > N1 / 2) d -= N1;
+    const ax = Math.abs(d), sgn = d < 0 ? -1 : 1, e = Math.min(ax, 1);
+    const x = sgn * (e * .74 + Math.max(0, ax - 1) * .5);
+    const z = -Math.min(ax, 6) * .7;
+    const oy = -sgn * (e * 1 + Math.max(0, Math.min(ax - 1, 4)) * .03);
+    const sc = lerp(1.16, .6, clamp(ax / 6, 0, 1));
+    const a = clamp((4.2 - ax) / .7, 0, 1);
+    return {
+      x: x,
+      y: 0,
+      z: z,
+      scale: sc,
+      faceCam: false,
+      oy: oy,
+      op: 0,
+      alpha: a,
+      skip: a < .02,
+      order: -ax,
+      snap: true
+    };
+  },
+  'card-deck': (i, N, t, C) => {
+    const S = C.S, N1 = Math.max(1, N), front = t * .4 * S.speed;
+    let d = i - front;
+    d = (d % N1 + N1) % N1;
+    if (d > N1 / 2) d -= N1;
+    const ax = Math.abs(d), sgn = d < 0 ? -1 : 1;
+    const x = sgn * (.05 * Math.min(ax, 5));
+    const y = -Math.min(ax, 6) * .028;
+    const z = -Math.min(ax, 6) * .16;
+    const oy = -sgn * Math.min(ax, 4) * .13;
+    const sc = lerp(1.1, .78, clamp(ax / 6, 0, 1));
+    const a = clamp((4.5 - ax) / .8, 0, 1);
+    return {
+      x: x,
+      y: y,
+      z: z,
+      scale: sc,
+      faceCam: false,
+      oy: oy,
+      op: 0,
+      alpha: a,
+      skip: a < .02,
+      order: -ax,
+      snap: true
+    };
+  }
+};
+
+const STYLE_PRESETS = {
+  flow: {
+    axes: 1,
+    angle: 0,
+    bend: 0,
+    bendFreq: 1,
+    gap: .9,
+    scaleGrad: .18,
+    tilt3d: 0,
+    faceHeading: 0,
+    photoAngle: 0
+  },
+  waterfall: {
+    axes: 3,
+    angle: 0,
+    bend: 0,
+    bendFreq: 1,
+    gap: .85,
+    scaleGrad: .15,
+    tilt3d: 0,
+    faceHeading: 0,
+    photoAngle: 0
+  },
+  'sine-wave': {
+    axes: 1,
+    angle: 0,
+    bend: .55,
+    bendFreq: 2,
+    gap: 1,
+    scaleGrad: .1,
+    tilt3d: 0,
+    faceHeading: 0,
+    photoAngle: 0
+  },
+  zigzag: {
+    axes: 1,
+    angle: 0,
+    bend: .6,
+    bendFreq: 3,
+    gap: 1,
+    scaleGrad: .1,
+    tilt3d: 0,
+    faceHeading: 0,
+    photoAngle: 0
+  }
+};
+
+const AXIS_KEYS_ALL = [ 'flow.axes', 'flow.angle', 'flow.gap', 'flow.scaleGrad', 'flow.bend', 'flow.bendFreq', 'flow.faceHeading', 'flow.photoAngle', 'flow.tilt3d', 'flow.speed' ];
+
+const STYLE_AXIS = {
+  flow: AXIS_KEYS_ALL,
+  'sine-wave': [ 'flow.angle', 'flow.gap', 'flow.scaleGrad', 'flow.bend', 'flow.bendFreq', 'flow.faceHeading', 'flow.photoAngle', 'flow.tilt3d', 'flow.speed' ],
+  zigzag: [ 'flow.angle', 'flow.gap', 'flow.scaleGrad', 'flow.bend', 'flow.bendFreq', 'flow.faceHeading', 'flow.photoAngle', 'flow.tilt3d', 'flow.speed' ],
+  waterfall: [ 'flow.axes', 'flow.gap', 'flow.scaleGrad', 'flow.faceHeading', 'flow.photoAngle', 'flow.speed' ]
+};
+
+function applyStylePreset(id) {
+  const p = STYLE_PRESETS[id];
+  if (p) Object.assign(state.flow, p);
+}
+
+const LAYOUT_LIST = [ [ 'flow', 'Flow — lanes', 'The core axis engine. Rotate the Angle for horizontal / vertical / diagonal lanes; bend them, add lanes, set spacing (density), size falloff, per-image 3D and tilt. Seamless recycle.' ], [ 'waterfall', 'Waterfall', 'Frames fall in several columns, staggered and overlapping — a continuous cascade.' ], [ 'sine-wave', 'Sine Wave', 'Frames ride a curved sine axis — a flow preset.' ], [ 'zigzag', 'Zigzag', 'A sharply folded axis — a flow preset.' ], [ 'pulsing-circle', 'Pulsing Circle', 'A ring whose radius breathes in and out.' ], [ 'radial', 'Rotating Radial', 'A ring rotating in depth — the orbit ticker.' ], [ 'vortex', 'Vortex', 'A spiral winding out from the centre.' ], [ 'helix', 'DNA Helix', 'Two strands winding through 3-D space.' ], [ 'spring', 'Spring', 'A coil travelling through depth.' ], [ 'grid', 'Grid Layout', 'Frames on a grid, reshuffling cells.' ], [ 'float', 'Random Float', 'Loose drift, no rigid path.' ], [ 'carousel', 'Perspective Carousel', 'Cover-flow arc — centre faces you, sides turn away.' ], [ 'card-deck', 'Card Deck', 'A stacked deck fanning out; recycle hidden at the faded sides.' ], [ 'flip-book', 'Flip Book', 'A stack of frames flipping like a calendar.' ] ];
+
+const _mc = v => v < 0 ? 0 : v > 1 ? 1 : v;
+
+const MOTION_ARCH = {
+  slow: {
+    speed: .6,
+    ease: t => .5 * (1 - Math.cos(Math.PI * _mc(t)))
+  },
+  fast: {
+    speed: 1.8,
+    ease: t => 1 - Math.pow(1 - _mc(t), 3)
+  },
+  soft: {
+    speed: .9,
+    ease: t => {
+      t = _mc(t);
+      return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+  },
+  raw: {
+    speed: 1.3,
+    ease: t => _mc(t)
+  }
+};
+
+function motionResolve(x, y) {
+  x = _mc(x);
+  y = _mc(y);
+  const A = MOTION_ARCH;
+  const w = {
+    slow: (1 - x) * (1 - y),
+    fast: x * (1 - y),
+    soft: (1 - x) * y,
+    raw: x * y
+  };
+  const speed = w.slow * A.slow.speed + w.fast * A.fast.speed + w.soft * A.soft.speed + w.raw * A.raw.speed;
+  const ease = t => {
+    t = _mc(t);
+    return w.slow * A.slow.ease(t) + w.fast * A.fast.ease(t) + w.soft * A.soft.ease(t) + w.raw * A.raw.ease(t);
+  };
+  return {
+    speed: speed,
+    ease: ease
+  };
+}
+
+const MOTION_PRESETS = {
+  balanced: [ .5, .5 ],
+  glide: [ .2, .82 ],
+  snappy: [ .72, .28 ],
+  linear: [ .9, .9 ]
+};
+
+function assertCore() {
+  const N = 24;
+  const C = {
+    S: {
+      count: N,
+      size: 100,
+      spin: .4,
+      speed: 1,
+      spread: 1,
+      follow: .16
+    },
+    F: {
+      axes: 1,
+      angle: 0,
+      bend: 0,
+      bendFreq: 1,
+      gap: 1.15,
+      scaleGrad: .22,
+      tilt3d: 0,
+      faceHeading: 0,
+      photoAngle: 0,
+      speed: 1
+    },
+    vx: 1.9,
+    vy: 1.09,
+    rnd: k => rng(k + 1)()
+  };
+  const variants = [ {
+    angle: 0,
+    tilt3d: 0
+  }, {
+    angle: 90,
+    faceHeading: .5,
+    photoAngle: 30
+  }, {
+    angle: -32,
+    bend: .5,
+    tilt3d: .6,
+    faceHeading: .4,
+    axes: 3
+  } ];
+  for (const [name] of LAYOUT_LIST) {
+    const f = LAYOUTS[name];
+    for (const v of variants) {
+      C.F = Object.assign({
+        axes: 1,
+        angle: 0,
+        bend: 0,
+        bendFreq: 1,
+        gap: 1.15,
+        scaleGrad: .22,
+        tilt3d: 0,
+        faceHeading: 0,
+        photoAngle: 0,
+        speed: 1
+      }, v);
+      for (let i = 0; i < N; i++) {
+        const q = f(i, N, i * .13, C);
+        if (!q || ![ q.x, q.y, q.z, q.scale ].every(Number.isFinite)) throw new Error('bad layout ' + name);
+        if (!q.skip && Math.max(Math.abs(q.x), Math.abs(q.y), Math.abs(q.z)) > 8) throw new Error('unbounded ' + name);
+      }
+    }
+  }
+  if (Math.abs(arValue('16:9') - 16 / 9) > 1e-9) throw new Error('ar');
+  return true;
+}
+
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+
+const mpad = document.getElementById('mpadc'), mctx = mpad.getContext('2d');
+
+let W = 0, H = 0, DPR = 1, last = performance.now();
+
+let FR = {
+  x: 0,
+  y: 0,
+  w: 100,
+  h: 100
+};
+
+let items = [];
+
+let media = [];
+
+let rec = null, recChunks = [], recTimer = null;
+
+const state = {
+  version: 1,
+  layout: 'radial',
+  scene: {
+    count: 39,
+    size: 115,
+    spin: 1.05,
+    speed: .75,
+    follow: .5,
+    spread: 2.18
+  },
+  flow: {
+    axes: 1,
+    angle: 0,
+    bend: 0,
+    bendFreq: 1,
+    gap: .9,
+    scaleGrad: .18,
+    tilt3d: 0,
+    faceHeading: 0,
+    photoAngle: 0,
+    speed: 1
+  },
+  frame: {
+    canvasAR: '16:9',
+    itemAR: 'original',
+    fit: 'cover',
+    radius: 8
+  },
+  look: {
+    bg: '#f6f5f2'
+  },
+  cam: {
+    yaw: 0,
+    tilt: -.31,
+    zoom: .84,
+    persp: .7,
+    autoYaw: .22
+  },
+  motion: {
+    x: .2,
+    y: .55,
+    speed: 1
+  },
+  anim: {
+    t: 0,
+    loop: 1,
+    hold: 2
+  }
+};
+
+const FLOW_STYLES = [ 'flow', 'waterfall', 'sine-wave', 'zigzag' ];
+
+const isFlow = id => FLOW_STYLES.includes(id);
+
+const $ = s => document.querySelector(s);
+
+const getPath = k => k.split('.').reduce((o, p) => o[p], state);
+
+const setPath = (k, v) => {
+  const ps = k.split('.'), lp = ps.pop();
+  ps.reduce((o, p) => o[p], state)[lp] = v;
+};
+
+function deepMerge(t, s) {
+  for (const k in s) {
+    if (s[k] && typeof s[k] === 'object' && !Array.isArray(s[k])) {
+      if (!t[k] || typeof t[k] !== 'object') t[k] = {};
+      deepMerge(t[k], s[k]);
+    } else t[k] = s[k];
+  }
+  return t;
+}
+
+function buildTexture(img, imgAspect) {
+  const frameAR = arValue(state.frame.itemAR, imgAspect);
+  const TH = 360, TW = Math.round(TH * frameAR);
+  const c = document.createElement('canvas');
+  c.width = Math.max(2, TW);
+  c.height = TH;
+  const x = c.getContext('2d');
+  const r = clamp(state.frame.radius / 100 * Math.min(TW, TH), 0, Math.min(TW, TH) / 2);
+  x.beginPath();
+  roundRectPath(x, 0, 0, TW, TH, r);
+  x.closePath();
+  if (!img) {
+    x.fillStyle = '#d9d7d1';
+    x.fill();
+    c.aspect = frameAR;
+    return c;
+  }
+  x.save();
+  x.clip();
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height, ia = iw / ih;
+  let dw, dh, dx, dy;
+  if (state.frame.fit === 'contain') {
+    x.fillStyle = '#e9e7e2';
+    x.fillRect(0, 0, TW, TH);
+    if (ia > frameAR) {
+      dw = TW;
+      dh = TW / ia;
+    } else {
+      dh = TH;
+      dw = TH * ia;
+    }
+    dx = (TW - dw) / 2;
+    dy = (TH - dh) / 2;
+  } else {
+    if (ia > frameAR) {
+      dh = TH;
+      dw = TH * ia;
+    } else {
+      dw = TW;
+      dh = TW / ia;
+    }
+    dx = (TW - dw) / 2;
+    dy = (TH - dh) / 2;
+  }
+  x.drawImage(img, dx, dy, dw, dh);
+  x.restore();
+  c.aspect = frameAR;
+  return c;
+}
+
+function roundRectPath(x, px, py, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  x.moveTo(px + r, py);
+  x.arcTo(px + w, py, px + w, py + h, r);
+  x.arcTo(px + w, py + h, px, py + h, r);
+  x.arcTo(px, py + h, px, py, r);
+  x.arcTo(px, py, px + w, py, r);
+}
+
+let textures = [];
+
+function grayTex(aspect, shade) {
+  const TH = 360, TW = Math.max(2, Math.round(TH * aspect));
+  const c = document.createElement('canvas');
+  c.width = TW;
+  c.height = TH;
+  const x = c.getContext('2d');
+  const r = clamp(state.frame.radius / 100 * Math.min(TW, TH), 0, Math.min(TW, TH) / 2);
+  x.beginPath();
+  roundRectPath(x, 0, 0, TW, TH, r);
+  x.closePath();
+  x.fillStyle = shade;
+  x.fill();
+  c.aspect = aspect;
+  return c;
+}
+
+function rebuildTextures() {
+  if (media.length) {
+    textures = media.map(m => buildTexture(m.img, m.aspect));
+    return;
+  }
+  const shades = [ '#c9c7c1', '#bcbab4', '#d0cec8', '#c2c0ba', '#b5b3ad', '#cac8c2' ];
+  const ar = arValue(state.frame.itemAR, 1.5);
+  textures = shades.map(s => grayTex(ar, s));
+}
+
+function flowFillCount() {
+  const vp = vpHalf(), reach = vp.x + vp.y + .6;
+  const step = Math.max(.09, (state.flow.gap || 1) * .5 * (state.scene.size / 100));
+  const axes = Math.max(1, Math.round(state.flow.axes || 1));
+  return clamp(Math.ceil((2 * reach + 3 * step) / step) * axes + axes, 8, 160);
+}
+
+function reinit() {
+  const n = isFlow(state.layout) ? flowFillCount() : Math.round(clamp(state.scene.count, 3, 50));
+  items = [];
+  for (let i = 0; i < n; i++) items.push({
+    x: 0,
+    y: 0,
+    z: 0,
+    sc: 1,
+    rot2d: 0,
+    shown: 0,
+    p: 0,
+    alpha: 1
+  });
+  rebuildTextures();
+  syncPanel();
+}
+
+const _scratch = document.createElement('canvas'), _sx = _scratch.getContext('2d');
+
+function texTriInto(g, tex, ox, oy, u0, v0, x0, y0, u1, v1, x1, y1, u2, v2, x2, y2) {
+  x0 -= ox;
+  y0 -= oy;
+  x1 -= ox;
+  y1 -= oy;
+  x2 -= ox;
+  y2 -= oy;
+  const den = (u1 - u0) * (v2 - v0) - (u2 - u0) * (v1 - v0);
+  if (Math.abs(den) < 1e-6) return;
+  const a = ((x1 - x0) * (v2 - v0) - (x2 - x0) * (v1 - v0)) / den;
+  const c = ((x2 - x0) * (u1 - u0) - (x1 - x0) * (u2 - u0)) / den;
+  const e = x0 - a * u0 - c * v0;
+  const b = ((y1 - y0) * (v2 - v0) - (y2 - y0) * (v1 - v0)) / den;
+  const d = ((y2 - y0) * (u1 - u0) - (y1 - y0) * (u2 - u0)) / den;
+  const f = y0 - b * u0 - d * v0;
+  const cx = (x0 + x1 + x2) / 3, cy = (y0 + y1 + y2) / 3, INF = .6;
+  const ip = (px, py) => {
+    const dx = px - cx, dy = py - cy, dd = Math.hypot(dx, dy) || 1;
+    return [ px + dx / dd * INF, py + dy / dd * INF ];
+  };
+  const A = ip(x0, y0), B = ip(x1, y1), Cc = ip(x2, y2);
+  g.save();
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  g.beginPath();
+  g.moveTo(A[0], A[1]);
+  g.lineTo(B[0], B[1]);
+  g.lineTo(Cc[0], Cc[1]);
+  g.closePath();
+  g.clip();
+  g.setTransform(a * DPR, b * DPR, c * DPR, d * DPR, e * DPR, f * DPR);
+  g.drawImage(tex, 0, 0);
+  g.restore();
+}
+
+function drawQuadWorld(tex, cTL, cTR, cBR, cBL, cam, alpha) {
+  const G = 5, TW = tex.width, TH = tex.height;
+  const P = [];
+  let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
+  for (let gy = 0; gy <= G; gy++) {
+    P[gy] = [];
+    for (let gx = 0; gx <= G; gx++) {
+      const fx = gx / G, fy = gy / G;
+      const top = {
+        x: lerp(cTL.x, cTR.x, fx),
+        y: lerp(cTL.y, cTR.y, fx),
+        z: lerp(cTL.z, cTR.z, fx)
+      };
+      const bot = {
+        x: lerp(cBL.x, cBR.x, fx),
+        y: lerp(cBL.y, cBR.y, fx),
+        z: lerp(cBL.z, cBR.z, fx)
+      };
+      const wp = {
+        x: lerp(top.x, bot.x, fy),
+        y: lerp(top.y, bot.y, fy),
+        z: lerp(top.z, bot.z, fy)
+      };
+      const p = project(wp, cam, W, H);
+      P[gy][gx] = p;
+      if (p.x < minx) minx = p.x;
+      if (p.x > maxx) maxx = p.x;
+      if (p.y < miny) miny = p.y;
+      if (p.y > maxy) maxy = p.y;
+    }
+  }
+  const pad = 2, bx = Math.floor(minx - pad), by = Math.floor(miny - pad);
+  const bw = Math.ceil(maxx - minx + 2 * pad), bh = Math.ceil(maxy - miny + 2 * pad);
+  if (bw <= 0 || bh <= 0 || bw > 4096 || bh > 4096) return;
+  const dw = Math.ceil(bw * DPR), dh = Math.ceil(bh * DPR);
+  if (_scratch.width < dw || _scratch.height < dh) {
+    _scratch.width = Math.max(_scratch.width, dw);
+    _scratch.height = Math.max(_scratch.height, dh);
+  }
+  _sx.setTransform(1, 0, 0, 1, 0, 0);
+  _sx.clearRect(0, 0, _scratch.width, _scratch.height);
+  for (let gy = 0; gy < G; gy++) for (let gx = 0; gx < G; gx++) {
+    const u0 = gx / G * TW, u1 = (gx + 1) / G * TW, v0 = gy / G * TH, v1 = (gy + 1) / G * TH;
+    const a = P[gy][gx], b = P[gy][gx + 1], c = P[gy + 1][gx + 1], d = P[gy + 1][gx];
+    texTriInto(_sx, tex, bx, by, u0, v0, a.x, a.y, u1, v0, b.x, b.y, u1, v1, c.x, c.y);
+    texTriInto(_sx, tex, bx, by, u0, v0, a.x, a.y, u1, v1, c.x, c.y, u0, v1, d.x, d.y);
+  }
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = clamp(alpha, 0, 1);
+  ctx.drawImage(_scratch, 0, 0, dw, dh, bx * DPR, by * DPR, bw * DPR, bh * DPR);
+  ctx.restore();
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+
+function drawBillboard(tex, cx, cy, halfW, halfH, rot2d) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  if (rot2d) ctx.rotate(rot2d);
+  ctx.drawImage(tex, -halfW, -halfH, halfW * 2, halfH * 2);
+  ctx.restore();
+}
+
+function baseHalfHeight() {
+  return .3 * (state.scene.size / 100);
+}
+
+function vpHalf() {
+  const base = Math.min(FR.w, FR.h) * .46;
+  return {
+    x: FR.w / 2 / base,
+    y: FR.h / 2 / base
+  };
+}
+
+function frame(now) {
+  const rawDt = Math.min(.05, (now - last) / 1e3 || .016);
+  last = now;
+  const mr = motionResolve(state.motion.x, state.motion.y);
+  state.motion.speed = +mr.speed.toFixed(2);
+  const dt = rawDt * mr.speed;
+  state.anim.t += dt;
+  ctx.fillStyle = state.look.bg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(FR.x, FR.y, FR.w, FR.h);
+  ctx.clip();
+  state.cam.yaw += state.cam.autoYaw * dt;
+  const cam = {
+    ...state.cam
+  };
+  if (isFlow(state.layout)) {
+    const dz = Math.min(1.1, (state.flow.tilt3d || 0) + (state.flow.faceHeading || 0));
+    cam.yaw = 0;
+    cam.tilt = 0;
+    cam.persp = clamp(dz * .8, 0, .85);
+  }
+  const n = items.length, layoutFn = LAYOUTS[state.layout] || LAYOUTS['flow'];
+  const vp = vpHalf();
+  const C = {
+    S: state.scene,
+    F: state.flow,
+    vx: vp.x,
+    vy: vp.y,
+    rnd: kk => rng(1234 + kk * 97)()
+  };
+  const k = 1 - Math.pow(1 - clamp(state.scene.follow, .02, .5), dt * 60);
+  const hh = baseHalfHeight(), spread = state.scene.spread;
+  const draws = [];
+  for (let i = 0; i < n; i++) {
+    const tgt = layoutFn(i, n, state.anim.t, C), it = items[i];
+    const Tx = tgt.x * spread, Ty = tgt.y * spread, Tz = tgt.z * spread, Tsc = tgt.scale == null ? 1 : tgt.scale;
+    const snap = tgt.snap || Math.hypot(Tx - it.x, Ty - it.y, Tz - it.z) > .6;
+    if (snap) {
+      it.x = Tx;
+      it.y = Ty;
+      it.z = Tz;
+      it.sc = Tsc;
+    } else {
+      it.x = lerp(it.x, Tx, k);
+      it.y = lerp(it.y, Ty, k);
+      it.z = lerp(it.z, Tz, k);
+      it.sc = lerp(it.sc, Tsc, k);
+    }
+    it.rot2d = tgt.rot2d || 0;
+    it.alpha = tgt.alpha == null ? 1 : tgt.alpha;
+    it.p = Math.min(1, it.p + dt * 1.8);
+    it.shown = mr.ease(it.p);
+    if (tgt.skip) continue;
+    const faceCam = tgt.faceCam !== false;
+    let right = null, up = null;
+    if (!faceCam) {
+      if (tgt.right) {
+        right = tgt.right;
+        up = tgt.up;
+      } else {
+        right = rot3X(rot3Y({
+          x: 1,
+          y: 0,
+          z: 0
+        }, tgt.oy || 0), tgt.op || 0);
+        up = rot3X(rot3Y({
+          x: 0,
+          y: 1,
+          z: 0
+        }, tgt.oy || 0), tgt.op || 0);
+      }
+    }
+    const tex = textures[i % textures.length], aspect = tex.aspect || 1;
+    const halfH = hh * it.sc, halfW = halfH * aspect;
+    const centerWorld = {
+      x: it.x,
+      y: it.y,
+      z: it.z
+    };
+    const cproj = project(centerWorld, cam, W, H);
+    const ord = tgt.order != null ? tgt.order : cproj.z;
+    draws.push({
+      it: it,
+      tex: tex,
+      halfW: halfW,
+      halfH: halfH,
+      faceCam: faceCam,
+      right: right,
+      up: up,
+      cproj: cproj,
+      centerWorld: centerWorld,
+      ord: ord
+    });
+  }
+  draws.sort((a, b) => a.ord - b.ord);
+  for (const D of draws) {
+    const a = clamp(D.it.shown * D.it.alpha, 0, 1);
+    if (D.faceCam) {
+      ctx.globalAlpha = a;
+      const hw = D.halfW * D.cproj.k, hh2 = D.halfH * D.cproj.k;
+      drawBillboard(D.tex, D.cproj.x, D.cproj.y, hw, hh2, D.it.rot2d);
+    } else {
+      const c = D.centerWorld, r = D.right, u = D.up, hw = D.halfW, hv = D.halfH;
+      const TL = {
+        x: c.x - r.x * hw + u.x * hv,
+        y: c.y - r.y * hw + u.y * hv,
+        z: c.z - r.z * hw + u.z * hv
+      };
+      const TR = {
+        x: c.x + r.x * hw + u.x * hv,
+        y: c.y + r.y * hw + u.y * hv,
+        z: c.z + r.z * hw + u.z * hv
+      };
+      const BR = {
+        x: c.x + r.x * hw - u.x * hv,
+        y: c.y + r.y * hw - u.y * hv,
+        z: c.z + r.z * hw - u.z * hv
+      };
+      const BL = {
+        x: c.x - r.x * hw - u.x * hv,
+        y: c.y - r.y * hw - u.y * hv,
+        z: c.z - r.z * hw - u.z * hv
+      };
+      drawQuadWorld(D.tex, TL, TR, BR, BL, cam, a);
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+  requestAnimationFrame(frame);
+}
+
+function buildSliders(elId, defs) {
+  const el = typeof elId === 'string' ? $('#' + elId) : elId;
+  [ ...el.querySelectorAll('.row') ].forEach(r => r.remove());
+  for (const [key, name, min, max, step] of defs) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    if (min === 0 && max === 1 && step === 1) {
+      row.classList.add('toggle');
+      row.innerHTML = `<label>${name}</label><input type="checkbox" class="sw">`;
+      const cb = row.querySelector('input');
+      cb.checked = !!getPath(key);
+      cb.dataset.key = key;
+      cb.addEventListener('change', () => setPath(key, cb.checked ? 1 : 0));
+      el.appendChild(row);
+      continue;
+    }
+    row.innerHTML = `<label>${name}</label><input type="range" min="${min}" max="${max}" step="${step}"><input class="val" type="number" min="${min}" max="${max}" step="${step}">`;
+    const inp = row.querySelector('input[type=range]'), val = row.querySelector('.val');
+    const fmt = v => +(+v).toFixed(step < 1 ? 2 : 0);
+    inp.value = getPath(key);
+    val.value = fmt(getPath(key));
+    inp.dataset.key = key;
+    const side = k => {
+      if (k === 'scene.count') reinit();
+      if (k === 'frame.radius') rebuildTextures();
+      if (isFlow(state.layout) && (k === 'flow.gap' || k === 'flow.axes' || k === 'scene.size' || k === 'flow.angle')) reinit();
+    };
+    const on = v => {
+      setPath(key, +v);
+      val.value = fmt(v);
+      side(key);
+    };
+    inp.addEventListener('input', () => on(inp.value));
+    val.addEventListener('change', () => {
+      const x = parseFloat(val.value);
+      if (isFinite(x)) {
+        setPath(key, x);
+        inp.value = x;
+        side(key);
+      }
+    });
+    el.appendChild(row);
+  }
+}
+
+function syncPanel() {
+  document.querySelectorAll('#panel input[type=range]').forEach(inp => {
+    const k = inp.dataset.key;
+    if (!k) return;
+    const v = getPath(k), step = +inp.step;
+    inp.value = v;
+    if (inp.nextElementSibling) inp.nextElementSibling.value = +(+v).toFixed(step < 1 ? 2 : 0);
+  });
+  document.querySelectorAll('#panel input.sw').forEach(cb => {
+    if (cb.dataset.key) cb.checked = !!getPath(cb.dataset.key);
+  });
+  $('#layoutSel').value = state.layout;
+  $('#canvasAR').value = state.frame.canvasAR;
+  $('#itemAR').value = state.frame.itemAR;
+  $('#fitSel').value = state.frame.fit;
+  $('#bgColor').value = state.look.bg;
+  $('#bgHex').value = state.look.bg;
+  $('#loop').setAttribute('aria-pressed', String(!!state.anim.loop));
+}
+
+function drawPad() {
+  if (!mpad.clientWidth || !mpad.clientHeight) return;
+  const w = mpad.clientWidth, h = mpad.clientHeight;
+  if (mpad.width !== Math.round(w * DPR) || mpad.height !== Math.round(h * DPR)) {
+    mpad.width = Math.round(w * DPR);
+    mpad.height = Math.round(h * DPR);
+  }
+  mctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  mctx.clearRect(0, 0, w, h);
+  mctx.strokeStyle = '#ececea';
+  mctx.lineWidth = 1;
+  mctx.beginPath();
+  for (let i = 1; i < 4; i++) {
+    const gx = (i * w / 4 | 0) + .5, gy = (i * h / 4 | 0) + .5;
+    mctx.moveTo(gx, 0);
+    mctx.lineTo(gx, h);
+    mctx.moveTo(0, gy);
+    mctx.lineTo(w, gy);
+  }
+  mctx.stroke();
+  mctx.globalAlpha = .7;
+  mctx.strokeStyle = '#0b0b0c';
+  mctx.lineWidth = 1.5;
+  mctx.lineJoin = 'round';
+  mctx.beginPath();
+  const mr = motionResolve(state.motion.x, state.motion.y);
+  for (let i = 0; i <= 80; i++) {
+    const t = i / 80, x = t * w, y = h - mr.ease(t) * h;
+    i ? mctx.lineTo(x, y) : mctx.moveTo(x, y);
+  }
+  mctx.stroke();
+  mctx.globalAlpha = 1;
+  const px = state.motion.x * w, py = (1 - state.motion.y) * h;
+  mctx.fillStyle = '#1a1a1a';
+  mctx.beginPath();
+  mctx.arc(px, py, 6, 0, TAU);
+  mctx.fill();
+}
+
+function initMotionPad() {
+  let drag = false;
+  const from = e => {
+    const r = mpad.getBoundingClientRect();
+    return {
+      x: clamp((e.clientX - r.left) / r.width, 0, 1),
+      y: clamp(1 - (e.clientY - r.top) / r.height, 0, 1)
+    };
+  };
+  mpad.addEventListener('pointerdown', e => {
+    drag = true;
+    mpad.setPointerCapture(e.pointerId);
+    const p = from(e);
+    state.motion.x = p.x;
+    state.motion.y = p.y;
+    drawPad();
+  });
+  mpad.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const p = from(e);
+    state.motion.x = p.x;
+    state.motion.y = p.y;
+    drawPad();
+  });
+  mpad.addEventListener('pointerup', () => drag = false);
+  $('#easePreset').addEventListener('change', e => {
+    const p = MOTION_PRESETS[e.target.value] || MOTION_PRESETS.balanced;
+    state.motion.x = p[0];
+    state.motion.y = p[1];
+    drawPad();
+  });
+}
+
+function renderThumbs() {
+  const box = $('#thumbs');
+  box.innerHTML = '';
+  media.forEach((m, idx) => {
+    const d = document.createElement('div');
+    d.className = 'thumb';
+    d.innerHTML = `<img src="${m.url}"><b>${idx + 1}</b><i data-i="${idx}">×</i>`;
+    box.appendChild(d);
+  });
+  box.querySelectorAll('i').forEach(el => el.addEventListener('click', () => {
+    const i = +el.dataset.i;
+    const m = media[i];
+    if (m && m.url) URL.revokeObjectURL(m.url);
+    media.splice(i, 1);
+    rebuildTextures();
+    renderThumbs();
+  }));
+}
+
+function addFiles(files) {
+  const imgs = [ ...files ].filter(f => /^image\//.test(f.type));
+  let pending = imgs.length;
+  if (!pending) return;
+  imgs.forEach(f => {
+    const url = URL.createObjectURL(f), img = new Image;
+    img.onload = () => {
+      media.push({
+        img: img,
+        aspect: img.naturalWidth / img.naturalHeight,
+        url: url
+      });
+      if (--pending === 0) {
+        rebuildTextures();
+        renderThumbs();
+      }
+    };
+    img.onerror = () => {
+      if (--pending === 0) {
+        rebuildTextures();
+        renderThumbs();
+      }
+    };
+    img.src = url;
+  });
+}
+
+function initDrop() {
+  const drop = $('#drop'), fi = $('#fileInput');
+  drop.addEventListener('click', () => fi.click());
+  fi.addEventListener('change', e => {
+    addFiles(e.target.files);
+    fi.value = '';
+  });
+  [ 'dragenter', 'dragover' ].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault();
+    drop.classList.add('hot');
+  }));
+  [ 'dragleave', 'drop' ].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault();
+    drop.classList.remove('hot');
+  }));
+  drop.addEventListener('drop', e => {
+    if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files);
+  });
+  const stage = $('#stage');
+  [ 'dragover' ].forEach(ev => stage.addEventListener(ev, e => e.preventDefault()));
+  stage.addEventListener('drop', e => {
+    e.preventDefault();
+    if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files);
+  });
+  $('#clearAll').addEventListener('click', () => {
+    media.forEach(m => m.url && URL.revokeObjectURL(m.url));
+    media = [];
+    rebuildTextures();
+    renderThumbs();
+  });
+  $('#demoFill').addEventListener('click', () => makeDemoTiles());
+}
+
+function makeDemoTiles() {
+  const cols = [ [ '#0b0b0c', '#7a1f2b' ], [ '#4f83cc', '#20324d' ], [ '#5aa469', '#22422b' ], [ '#e0a43b', '#5a3f14' ], [ '#8f7bb8', '#3a2f4d' ], [ '#2b2b2b', '#6e6e6e' ] ];
+  cols.forEach((c, i) => {
+    const cn = document.createElement('canvas');
+    cn.width = 800;
+    cn.height = 600;
+    const x = cn.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 800, 600);
+    g.addColorStop(0, c[0]);
+    g.addColorStop(1, c[1]);
+    x.fillStyle = g;
+    x.fillRect(0, 0, 800, 600);
+    x.fillStyle = 'rgba(255,255,255,.9)';
+    x.font = 'bold 200px ui-monospace,monospace';
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.fillText(String(i + 1), 400, 320);
+    const url = cn.toDataURL(), img = new Image;
+    img.onload = () => {
+      media.push({
+        img: img,
+        aspect: 800 / 600,
+        url: url
+      });
+      rebuildTextures();
+      renderThumbs();
+    };
+    img.src = url;
+  });
+}
+
+function loadDefaultMedia() {
+  const names = [ 'image 143309.png', 'image 143310.png', 'image 143311.png', 'image 143312.png', 'image 143313.png', 'image 143314.png' ];
+  const loaded = [];
+  let done = 0;
+  const finish = () => {
+    const ok = loaded.filter(Boolean);
+    if (ok.length && !media.length) {
+      media = ok;
+      rebuildTextures();
+      renderThumbs();
+    }
+  };
+  names.forEach((nm, idx) => {
+    const img = new Image;
+    const src = encodeURI(nm);
+    img.onload = () => {
+      loaded[idx] = {
+        img: img,
+        aspect: img.naturalWidth / img.naturalHeight || 1,
+        url: src
+      };
+      if (++done === names.length) finish();
+    };
+    img.onerror = () => {
+      if (++done === names.length) finish();
+    };
+    img.src = src;
+  });
+}
+
+let recCanvas = document.createElement('canvas'), rctx = recCanvas.getContext('2d'), recRAF = 0, recording = false;
+
+function recAR() {
+  const p = String(state.frame.canvasAR).split(':').map(Number);
+  return (p[0] || 16) / (p[1] || 9);
+}
+
+function recCopyFrame() {
+  const cw = cv.width, ch = cv.height, tar = recAR(), src = cw / ch;
+  let sw, sh;
+  if (src > tar) {
+    sh = ch;
+    sw = Math.round(ch * tar);
+  } else {
+    sw = cw;
+    sh = Math.round(cw / tar);
+  }
+  const sx = Math.round((cw - sw) / 2), sy = Math.round((ch - sh) / 2);
+  rctx.drawImage(cv, sx, sy, sw, sh, 0, 0, recCanvas.width, recCanvas.height);
+  recRAF = requestAnimationFrame(recCopyFrame);
+}
+
+function chooseMime() {
+  const c = [ 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4;codecs=h264', 'video/mp4' ];
+  for (const m of c) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+  }
+  return '';
+}
+
+function toggleRec() {
+  if (rec) {
+    stopRec();
+    return;
+  }
+  if (!('MediaRecorder' in window)) {
+    $('#recNote').textContent = 'This browser has no MediaRecorder — video export is unavailable here.';
+    return;
+  }
+  const ar = recAR(), H0 = 1080;
+  recCanvas.height = H0;
+  recCanvas.width = Math.max(2, Math.round(H0 * ar));
+  recording = true;
+  recCopyFrame();
+  const stream = recCanvas.captureStream(30), mime = chooseMime();
+  try {
+    rec = new MediaRecorder(stream, mime ? {
+      mimeType: mime
+    } : undefined);
+  } catch (e) {
+    recording = false;
+    if (recRAF) cancelAnimationFrame(recRAF);
+    $('#recNote').textContent = 'Could not start recorder: ' + e.message;
+    return;
+  }
+  recChunks = [];
+  rec.ondataavailable = e => {
+    if (e.data && e.data.size) recChunks.push(e.data);
+  };
+  rec.onstop = () => {
+    const type = rec && rec.mimeType || mime || 'video/webm';
+    const blob = new Blob(recChunks, {
+      type: type
+    });
+    const url = URL.createObjectURL(blob);
+    const ext = /mp4/.test(type) ? 'mp4' : 'webm';
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'image-shuffler.' + ext;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4e3);
+    rec = null;
+    recChunks = [];
+    $('#recDot').classList.remove('on');
+    $('#recBtn').lastChild.textContent = 'Start recording';
+  };
+  state.anim.t = 0;
+  for (const it of items) {
+    it.shown = 0;
+    it.p = 0;
+  }
+  rec.start();
+  $('#recDot').classList.add('on');
+  $('#recBtn').lastChild.textContent = 'Stop & save';
+  const dur = clamp(+$('#recDur').value || 6, 1, 30);
+  recTimer = setTimeout(() => {
+    if (rec && rec.state !== 'inactive') stopRec();
+  }, dur * 1e3);
+}
+
+function stopRec() {
+  if (recTimer) {
+    clearTimeout(recTimer);
+    recTimer = null;
+  }
+  recording = false;
+  if (recRAF) {
+    cancelAnimationFrame(recRAF);
+    recRAF = 0;
+  }
+  if (rec && rec.state !== 'inactive') rec.stop();
+}
+
+function buildColorRow() {
+  const el = $('#gColors');
+  [ ...el.querySelectorAll('.colorRow') ].forEach(r => r.remove());
+  const row = document.createElement('div');
+  row.className = 'colorRow';
+  row.innerHTML = '<label>Canvas</label><input type="color" id="bgColor"><input class="tin" id="bgHex" spellcheck="false">';
+  el.appendChild(row);
+  const sw = row.querySelector('#bgColor'), tx = row.querySelector('#bgHex');
+  const commit = v => {
+    const m = String(v || '').trim();
+    if (!/^#[0-9a-fA-F]{6}$/.test(m)) return;
+    state.look.bg = m;
+    sw.value = m;
+    tx.value = m;
+  };
+  sw.value = state.look.bg;
+  tx.value = state.look.bg;
+  sw.addEventListener('input', () => commit(sw.value));
+  tx.addEventListener('change', () => commit(tx.value));
+}
+
+function initPanel() {
+  const sel = $('#layoutSel');
+  LAYOUT_LIST.forEach(([id, name]) => {
+    const o = document.createElement('option');
+    o.value = id;
+    o.textContent = name;
+    sel.appendChild(o);
+  });
+  sel.value = state.layout;
+  const setNote = () => {
+    const L = LAYOUT_LIST.find(l => l[0] === state.layout);
+    $('#layoutNote').textContent = L ? L[2] : '';
+  };
+  setNote();
+  sel.addEventListener('change', () => {
+    state.layout = sel.value;
+    setNote();
+    applyStylePreset(sel.value);
+    applyLayoutCamera();
+    applyControlContext();
+    reinit();
+    for (const it of items) {
+      it.shown = 0;
+      it.p = 0;
+    }
+    state.anim.t = 0;
+  });
+  $('#canvasAR').addEventListener('change', e => {
+    state.frame.canvasAR = e.target.value;
+    resize();
+  });
+  $('#itemAR').addEventListener('change', e => {
+    state.frame.itemAR = e.target.value;
+    rebuildTextures();
+  });
+  $('#fitSel').addEventListener('change', e => {
+    state.frame.fit = e.target.value;
+    rebuildTextures();
+  });
+  buildSliders('gFrame', [ [ 'frame.radius', 'Corner radius', 0, 50, 1 ] ]);
+  buildSliders('gAxes', [ [ 'flow.axes', 'Lanes', 1, 6, 1 ], [ 'flow.angle', 'Axis angle°', -180, 180, 1 ], [ 'flow.gap', 'Spacing / density', .4, 3, .05 ], [ 'flow.scaleGrad', 'Size falloff', 0, .8, .02 ], [ 'flow.bend', 'Bend', 0, 1.2, .02 ], [ 'flow.bendFreq', 'Bend waves', .5, 5, .1 ], [ 'flow.photoAngle', 'Photo angle°', -180, 180, 1 ], [ 'flow.faceHeading', 'Face heading (3D)', 0, .8, .02 ], [ 'flow.tilt3d', 'Plane tilt', 0, .8, .02 ], [ 'flow.speed', 'Flow speed', .1, 3, .05 ] ]);
+  buildSliders('gScene', [ [ 'scene.count', 'Number of items', 3, 50, 1 ], [ 'scene.size', 'Item size %', 25, 220, 1 ], [ 'scene.speed', 'Speed', .1, 2.5, .05 ], [ 'scene.spin', 'Spin', 0, 2, .05 ], [ 'scene.spread', 'Scale / spread', .5, 2.5, .02 ], [ 'scene.follow', 'Ease grip', .02, .5, .01 ] ]);
+  buildSliders('gMotionSliders', [ [ 'motion.speed', 'Tempo', .5, 1.9, .05 ] ]);
+  buildSliders('gCamera', [ [ 'cam.persp', 'Perspective', 0, 1.4, .05 ], [ 'cam.tilt', 'Tilt', -1.2, 1.2, .02 ], [ 'cam.zoom', 'Zoom', .5, 2, .02 ], [ 'cam.autoYaw', 'Auto-spin', -1, 1, .02 ] ]);
+  buildColorRow();
+  applyControlContext();
+}
+
+function applyLayoutCamera() {
+  const CAMS = {
+    radial: {
+      persp: .7,
+      tilt: -.31,
+      zoom: .84,
+      autoYaw: .22
+    },
+    vortex: {
+      persp: .5,
+      tilt: -.2
+    },
+    helix: {
+      persp: .85,
+      tilt: 0
+    },
+    spring: {
+      persp: .85,
+      tilt: 0
+    },
+    carousel: {
+      persp: .95,
+      tilt: 0
+    },
+    'flip-book': {
+      persp: .8,
+      tilt: .12
+    },
+    'card-deck': {
+      persp: .7,
+      tilt: .1
+    }
+  };
+  const c = CAMS[state.layout] || {
+    persp: 0,
+    tilt: 0
+  };
+  state.cam.persp = c.persp;
+  state.cam.tilt = c.tilt;
+  state.cam.yaw = 0;
+  state.cam.autoYaw = c.autoYaw || 0;
+  state.cam.zoom = c.zoom || 1;
+  syncPanel();
+}
+
+function applyControlContext() {
+  const flow = isFlow(state.layout);
+  const ax = $('#gAxes');
+  if (ax) ax.style.display = flow ? '' : 'none';
+  const camF = $('#gCamera');
+  if (camF) camF.style.display = flow ? 'none' : '';
+  const keys = STYLE_AXIS[state.layout] || [];
+  document.querySelectorAll('#gAxes .row').forEach(r => {
+    const inp = r.querySelector('[data-key]');
+    if (!inp) return;
+    r.style.display = keys.includes(inp.dataset.key) ? '' : 'none';
+  });
+  const spinStyles = [ 'radial', 'pulsing-circle', 'vortex' ];
+  document.querySelectorAll('#gScene .row').forEach(r => {
+    const inp = r.querySelector('[data-key]');
+    if (!inp) return;
+    const key = inp.dataset.key;
+    let show = true;
+    if (key === 'scene.spin') show = spinStyles.includes(state.layout);
+    if (key === 'scene.count') show = !flow;
+    r.style.display = show ? '' : 'none';
+  });
+}
+
+function bindUi() {
+  $('#tabs').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    document.querySelectorAll('#tabs button').forEach(x => x.setAttribute('aria-selected', String(x === b)));
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.dataset.tab === b.dataset.tab));
+    if (b.dataset.tab === 'controls') requestAnimationFrame(drawPad);
+  });
+  document.querySelectorAll('legend').forEach(l => l.addEventListener('click', () => l.parentElement.classList.toggle('closed')));
+  $('#replay').addEventListener('click', () => {
+    state.anim.t = 0;
+    for (const it of items) {
+      it.shown = 0;
+      it.p = 0;
+    }
+  });
+  $('#loop').addEventListener('click', () => {
+    state.anim.loop = state.anim.loop ? 0 : 1;
+    $('#loop').setAttribute('aria-pressed', String(!!state.anim.loop));
+  });
+  $('#hideBtn').addEventListener('click', () => document.body.classList.toggle('noui'));
+  $('#uitoggle').addEventListener('click', () => document.body.classList.toggle('noui'));
+  $('#recBtn').addEventListener('click', toggleRec);
+  $('#savePng').addEventListener('click', () => {
+    const ar = recAR(), H0 = 1600, w = Math.round(H0 * ar);
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = H0;
+    const x = c.getContext('2d');
+    const cw = cv.width, ch = cv.height, src = cw / ch;
+    let sw, sh;
+    if (src > ar) {
+      sh = ch;
+      sw = Math.round(ch * ar);
+    } else {
+      sw = cw;
+      sh = Math.round(cw / ar);
+    }
+    x.drawImage(cv, (cw - sw) / 2, (ch - sh) / 2, sw, sh, 0, 0, w, H0);
+    const a = document.createElement('a');
+    a.download = 'image-shuffler.png';
+    a.href = c.toDataURL('image/png');
+    a.click();
+  });
+  $('#saveCfg').addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.download = 'image-shuffler-config.json';
+    a.href = URL.createObjectURL(new Blob([ JSON.stringify(state, null, 2) ], {
+      type: 'application/json'
+    }));
+    a.click();
+  });
+  $('#loadFile').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    f.text().then(t => {
+      deepMerge(state, JSON.parse(t));
+      initPanel();
+      syncPanel();
+      reinit();
+    });
+  });
+  addEventListener('keydown', e => {
+    if (e.key.toLowerCase() === 'h' && !/input|textarea|select/i.test(document.activeElement.tagName)) document.body.classList.toggle('noui');
+  });
+  let drag = false, lx = 0, ly = 0;
+  cv.addEventListener('pointerdown', e => {
+    drag = true;
+    lx = e.clientX;
+    ly = e.clientY;
+    cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dx = e.clientX - lx, dy = e.clientY - ly;
+    lx = e.clientX;
+    ly = e.clientY;
+    state.cam.yaw += dx * .006;
+    state.cam.tilt = clamp(state.cam.tilt - dy * .006, -1.4, 1.4);
+    syncPanel();
+  });
+  cv.addEventListener('pointerup', () => drag = false);
+  cv.addEventListener('wheel', e => {
+    e.preventDefault();
+    state.cam.zoom = clamp(state.cam.zoom * (e.deltaY > 0 ? .94 : 1.06), .4, 3);
+    syncPanel();
+  }, {
+    passive: false
+  });
+}
+
+function computeFR() {
+  FR = {
+    x: 0,
+    y: 0,
+    w: W,
+    h: H
+  };
+}
+
+function resize() {
+  DPR = Math.min(devicePixelRatio || 1, 2);
+  W = innerWidth;
+  H = innerHeight;
+  cv.width = Math.max(1, Math.floor(W * DPR));
+  cv.height = Math.max(1, Math.floor(H * DPR));
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  computeFR();
+  drawPad();
+}
+
+addEventListener('resize', resize);
+
+function runSelfTest() {
+  try {
+    assertCore();
+    if (!items.length) throw new Error('no items');
+    console.log('SELFTEST_OK');
+    $('#selftest').style.display = 'block';
+  } catch (e) {
+    console.error('SELFTEST_FAIL', e);
+    $('#selftest').textContent = 'SELFTEST_FAIL';
+    $('#selftest').style.display = 'block';
+    throw e;
+  }
+}
+
+resize();
+
+initPanel();
+
+initMotionPad();
+
+initDrop();
+
+bindUi();
+
+reinit();
+
+drawPad();
+
+loadDefaultMedia();
+
+requestAnimationFrame(frame);
+
+requestAnimationFrame(drawPad);
+
+if (new URLSearchParams(location.search).get('selftest') === '1') setTimeout(runSelfTest, 80);
+
+window.__imgShuffler = {
+  state: state,
+  LAYOUTS: LAYOUTS,
+  LAYOUT_LIST: LAYOUT_LIST,
+  reinit: reinit,
+  media: media,
+  buildTexture: buildTexture,
+  assertCore: assertCore,
+  applyStylePreset: applyStylePreset,
+  applyLayoutCamera: applyLayoutCamera,
+  applyControlContext: applyControlContext
+};
+</script>
+<script>(function(){function u(r){var a=+r.min||0,b=+r.max||100,v=+r.value;r.style.setProperty('--p',((v-a)/((b-a)||1)*100)+'%')}function all(){document.querySelectorAll('input[type=range]').forEach(u)}document.addEventListener('input',function(e){if(e.target&&e.target.type==='range')u(e.target)});setInterval(all,250);all()})();</script>
+</body>
+</html>
